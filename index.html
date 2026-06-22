@@ -228,9 +228,8 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-/* ====== 시장현황 모델 (저사양 우선) ======
-   model-not-found 오류 시 'claude-sonnet-4-6' 으로 한 줄만 바꾸면 됩니다. */
-const MKT_MODEL = "claude-haiku-4-5-20251001";
+/* 시장현황 API 엔드포인트 — Vercel 프록시 경유 (API 키 노출 방지) */
+const MKT_ENDPOINT = "/api/market";
 
 /* 초기 내장 샘플 (업로드 전 미리보기용) — 실제 엑셀 업로드 시 전부 교체됨 */
 const SAMPLE = {
@@ -508,19 +507,17 @@ async function fetchMarket(){
   btn.disabled=true; const orig=btn.textContent; btn.textContent='⏳ 조회 중…';
   stat.className='mkt-status no-export'; stat.textContent='Claude가 기준일 기준 시장현황을 조회하고 있습니다…';
   try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
+    const res=await fetch(MKT_ENDPOINT,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:MKT_MODEL,
-        max_tokens:1000,
-        messages:[{role:"user",content:prompt}],
-        tools:[{type:"web_search_20250305",name:"web_search"}]
-      })
+      body:JSON.stringify({prompt, asof})
     });
-    if(!res.ok){throw new Error('HTTP '+res.status+' '+(await res.text()).slice(0,180));}
+    if(!res.ok){
+      const errBody=await res.json().catch(()=>({error:'서버 오류'}));
+      throw new Error('HTTP '+res.status+' — '+(errBody.error||''));
+    }
     const data=await res.json();
-    const text=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+    const text=data.text||'';
     if(!text) throw new Error('빈 응답');
     const el=document.getElementById('cmt1');
     el.innerHTML=`<b>[시장현황 · ${fmtDot(asof)}]</b> `+text.replace(/\n+/g,'<br>');
@@ -528,7 +525,7 @@ async function fetchMarket(){
     stat.className='mkt-status ok no-export'; stat.textContent='✓ 시장현황을 불러왔습니다. 필요 시 직접 수정하세요.';
   }catch(err){
     stat.className='mkt-status err no-export';
-    stat.textContent='⚠ 시장현황 조회 실패: '+err.message+' — 이 버튼은 Claude.ai 아티팩트 화면에서 동작합니다. (직접 입력은 가능)';
+    stat.textContent='⚠ 조회 실패: '+err.message;
   }finally{
     btn.disabled=false; btn.textContent=orig;
   }
