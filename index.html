@@ -682,8 +682,10 @@ async function loadDate(date){
   stat.className='share-status ing no-export'; stat.textContent=`${date} 데이터를 불러오는 중…`;
   try{
     const res=await fetch(`/api/load?date=${date}`);
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'로드 실패'); }
-    const { payload } = await res.json();
+    const text=await res.text();
+    let json; try{ json=JSON.parse(text); }catch(e){ throw new Error('서버 응답 파싱 실패: '+text.slice(0,80)); }
+    if(!res.ok) throw new Error(json.error||'로드 실패');
+    const { payload } = json;
     const { wm, comments } = payload;
     // 날짜 설정
     const iso=`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
@@ -712,7 +714,9 @@ async function loadDateList(){
   try{
     const res=await fetch('/api/load?list=1');
     if(!res.ok) return;
-    const { dates } = await res.json();
+    const text=await res.text();
+    let json; try{ json=JSON.parse(text); }catch(e){ return; }
+    const { dates } = json;
     const sel=document.getElementById('dateSelect');
     if(dates&&dates.length){
       dates.forEach(d=>{
