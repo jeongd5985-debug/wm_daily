@@ -11,28 +11,34 @@ export default async function handler(req, res) {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return res.status(500).json({ error: 'Upstash not configured' });
 
+  const headers = { Authorization: `Bearer ${token}` };
+
+  async function upstash(command) {
+    // command: array like ["GET", "key"] or ["ZRANGE", ...]
+    const r = await fetch(`${url}/${command.map(encodeURIComponent).join('/')}`, { headers });
+    const text = await r.text();
+    try { return JSON.parse(text); }
+    catch(e) { throw new Error('Upstash 파싱 실패: ' + text.slice(0, 120)); }
+  }
+
   try {
     const { date, list } = req.query;
 
-    // ?list=1 → 최근 저장 날짜 목록 반환
+    // ?list=1 → 최근 날짜 목록
     if (list) {
-      const r = await fetch(`${url}/zrange/wm_daily:index/+inf/-inf/BYSCORE/REV/LIMIT/0/30`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!r.ok) return res.status(200).json({ dates: [] });
-      const data = await r.json();
-      return res.status(200).json({ dates: (data.result || []).slice(0, 30) });
+      // ZRANGE key max min BYSCORE REV LIMIT 0 30
+      const data = await upstash([
+        'ZRANGE', 'wm_daily:index',
+        '+inf', '-inf',
+        'BYSCORE', 'REV',
+        'LIMIT', '0', '30'
+      ]);
+      return res.status(200).json({ dates: data.result || [] });
     }
 
     if (!date) return res.status(400).json({ error: 'date required' });
 
-    const key = `wm_daily:${date}`;
-    const r = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!r.ok) return res.status(404).json({ error: 'not found', date });
-    const data = await r.json();
-
+    const data = await upstash(['GET', `wm_daily:${date}`]);
     if (!data.result) return res.status(404).json({ error: 'not found', date });
 
     const payload = JSON.parse(data.result);
