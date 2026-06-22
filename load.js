@@ -16,9 +16,10 @@ export default async function handler(req, res) {
 
     // ?list=1 → 최근 저장 날짜 목록 반환
     if (list) {
-      const r = await fetch(`${url}/zrange/wm_daily:index/0/-1/rev`, {
+      const r = await fetch(`${url}/zrange/wm_daily:index/+inf/-inf/BYSCORE/REV/LIMIT/0/30`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (!r.ok) return res.status(200).json({ dates: [] });
       const data = await r.json();
       return res.status(200).json({ dates: (data.result || []).slice(0, 30) });
     }
@@ -29,6 +30,7 @@ export default async function handler(req, res) {
     const r = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    if (!r.ok) return res.status(404).json({ error: 'not found', date });
     const data = await r.json();
 
     if (!data.result) return res.status(404).json({ error: 'not found', date });
