@@ -12,24 +12,34 @@ export default async function handler(req, res) {
   if (!url || !token) return res.status(500).json({ error: 'Upstash not configured' });
 
   try {
-    const { date, payload } = req.body;          // date: "20260622", payload: { wm, comments }
+    const { date, payload } = req.body;
     if (!date || !payload) return res.status(400).json({ error: 'date and payload required' });
 
-    const key = `wm_daily:${date}`;
+    const key   = `wm_daily:${date}`;
     const value = JSON.stringify({ ...payload, savedAt: new Date().toISOString() });
+    const EX    = 60 * 60 * 24 * 30; // 30일
 
-    // SET with 30-day expiry
-    const r = await fetch(`${url}/set/${encodeURIComponent(key)}`, {
+    // Upstash pipeline — 한 번의 요청으로 SET + ZADD
+    const pipeline = [
+      ["SET", key, value, "EX", EX],
+      ["ZADD", "wm_daily:index", parseInt(date), date]
+    ];
+
+    const r = await fetch(`${url}/pipeline`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value, ex: 60 * 60 * 24 * 30 })
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(pipeline)
     });
-    if (!r.ok) throw new Error('Redis SET failed: ' + await r.text());
 
-    // 날짜 목록 관리 (score = 날짜 숫자, member = 날짜 문자열)
-    await fetch(`${url}/zadd/wm_daily:index/${parseInt(date)}/${encodeURIComponent(date)}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const text = await r.text();
+    let result;
+    try { result = JSON.parse(text); } catch(e) {
+      throw new Error('Upstash 응답 파싱 실패: ' + text.slice(0, 120));
+    }
+    if (!r.ok) throw new Error('Upstash 오류: ' + text.slice(0, 120));
 
     return res.status(200).json({ ok: true, key, date });
   } catch (err) {
