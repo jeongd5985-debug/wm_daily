@@ -26,11 +26,9 @@ export default async function handler(req, res) {
     });
     if (!r.ok) throw new Error('Redis SET failed: ' + await r.text());
 
-    // 날짜 목록도 관리 (최근 30일 목록용)
-    await fetch(`${url}/zadd/wm_daily:index`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: [{ score: parseInt(date), member: date }] })
+    // 날짜 목록 관리 (score = 날짜 숫자, member = 날짜 문자열)
+    await fetch(`${url}/zadd/wm_daily:index/${parseInt(date)}/${encodeURIComponent(date)}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
 
     return res.status(200).json({ ok: true, key, date });
