@@ -90,6 +90,24 @@
   .xbtn[disabled]{opacity:.55;cursor:wait}
   .exporting .no-export{display:none!important}
 
+  /* share / load bar */
+  .sharebar{background:var(--up-soft);border:1px solid #b2ddc8;border-radius:var(--radius);padding:11px 16px;
+    margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .sharebar.hidden{display:none}
+  .sharebar .sb-label{font-size:12.5px;font-weight:800;color:var(--up);white-space:nowrap}
+  .sharebar .sb-link{font-size:12px;color:#1a7a4a;word-break:break-all;flex:1;font-weight:600;
+    background:#fff;border:1px solid #b2ddc8;border-radius:7px;padding:5px 10px;cursor:pointer;
+    user-select:all;font-family:monospace}
+  .sbtn{background:var(--up);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;
+    font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:.12s}
+  .sbtn:hover{background:#177a4f} .sbtn:active{transform:translateY(1px)} .sbtn[disabled]{opacity:.6;cursor:wait}
+  .sbtn.outline{background:#fff;color:var(--up);border:1.5px solid var(--up)}
+  .sbtn.outline:hover{background:var(--up-soft)}
+  .share-status{font-size:11px;min-height:14px;margin-top:6px;font-weight:600}
+  .share-status.ok{color:var(--up)} .share-status.err{color:var(--down)} .share-status.ing{color:var(--muted)}
+  .datelist{font-size:12px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;
+    font-family:inherit;font-weight:700;color:var(--ink);background:#fff;cursor:pointer}
+
   /* market fetch button */
   .mktbtn{background:var(--ink);color:#fff;border:none;border-radius:8px;padding:8px 15px;font-size:12px;font-weight:700;
     cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.12s}
@@ -149,6 +167,22 @@
       <span><span class="t" id="wmName">WM 수탁고 파일</span><span class="s">_수탁고_*.xlsx ('오늘' 탭 / 집계표는 무시)</span></span>
       <input type="file" id="fileWM" accept=".xlsx,.xls">
     </label>
+  </div>
+
+  <!-- 공유 링크 생성 바 (파일 업로드 후 표시) -->
+  <div class="sharebar hidden no-export" id="shareBar">
+    <span class="sb-label">🔗 공유 링크</span>
+    <span class="sb-link" id="shareLink" title="클릭해서 복사"></span>
+    <button class="sbtn" id="btnCopy">📋 복사</button>
+    <button class="sbtn outline" id="btnSave">☁️ 저장 &amp; 링크 생성</button>
+  </div>
+  <div class="share-status no-export" id="shareStatus"></div>
+
+  <!-- 과거 날짜 불러오기 바 (?date= 없을 때 표시) -->
+  <div class="sharebar hidden no-export" id="loadBar" style="background:#f5f3ef;border-color:var(--line)">
+    <span class="sb-label" style="color:var(--muted)">📂 불러오기</span>
+    <select class="datelist" id="dateSelect"><option value="">— 저장된 날짜 선택 —</option></select>
+    <button class="sbtn outline" id="btnLoad" style="color:var(--muted);border-color:var(--muted)">불러오기</button>
   </div>
 
   <header>
@@ -546,6 +580,12 @@ function readFile(input){
       setDefaultCommentary();
       document.getElementById('dropWM').classList.add('ok');
       document.getElementById('wmName').textContent='✓ '+file.name.slice(0,24);
+      // 공유 버튼 노출 + 링크 미리 세팅
+      const shareUrl=`${location.origin}${location.pathname}?date=${(window.__ASOF||'').replace(/-/g,'')}`;
+      document.getElementById('shareLink').textContent=shareUrl;
+      document.getElementById('shareBar').classList.remove('hidden');
+      document.getElementById('shareStatus').className='share-status ing no-export';
+      document.getElementById('shareStatus').textContent='☁️ 저장 & 링크 생성 버튼을 눌러 팀과 공유하세요.';
     }catch(err){alert('파싱 오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
@@ -570,14 +610,152 @@ document.getElementById('btnImg').addEventListener('click',async function(){
   b.textContent=o;b.disabled=false;
 });
 
+/* ========== 공유 / 저장 / 불러오기 ========== */
+
+/* URL에서 ?date= 파라미터 추출 */
+function getUrlDate(){
+  return new URLSearchParams(location.search).get('date');
+}
+
+/* 저장할 payload 조립 — wm 데이터 + 현재 코멘트 */
+function buildPayload(){
+  const wm = window.__WM || {};
+  const comments = {};
+  EDITABLE_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) comments[id]=el.innerHTML;
+  });
+  // _rows는 너무 크니 핵심 필드만 추려서 저장 (드릴다운용)
+  const rows = (wm._rows||[]).map(r=>({
+    fund:r.fund, sales:r.sales, strat:r.strat, asset:r.asset,
+    pen:r.pen, center:r.center, retire:r.retire,
+    flow:r.flow, nav_chg:r.nav_chg, nav:r.nav
+  }));
+  const { _rows, ...wmCore } = wm;
+  return { wm: { ...wmCore, _rows: rows }, comments };
+}
+
+/* Upstash에 저장 → 공유 링크 생성 */
+async function saveAndShare(){
+  const btn=document.getElementById('btnSave');
+  const stat=document.getElementById('shareStatus');
+  const asof=window.__ASOF;
+  if(!asof){stat.className='share-status err no-export';stat.textContent='기준일을 먼저 설정하세요.';return;}
+  const date=asof.replace(/-/g,'');   // "20260622"
+
+  btn.disabled=true; const orig=btn.textContent; btn.textContent='⏳ 저장 중…';
+  stat.className='share-status ing no-export'; stat.textContent='서버에 저장하는 중…';
+  try{
+    const res=await fetch('/api/save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ date, payload: buildPayload() })
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'저장 실패'); }
+    const shareUrl=`${location.origin}${location.pathname}?date=${date}`;
+    document.getElementById('shareLink').textContent=shareUrl;
+    document.getElementById('shareBar').classList.remove('hidden');
+    stat.className='share-status ok no-export';
+    stat.textContent='✓ 저장 완료! 위 링크를 팀에 공유하세요.';
+    // 클립보드 자동 복사
+    try{ await navigator.clipboard.writeText(shareUrl); stat.textContent+=' (링크 복사됨)'; }catch(e){}
+  }catch(err){
+    stat.className='share-status err no-export'; stat.textContent='⚠ '+err.message;
+  }finally{
+    btn.disabled=false; btn.textContent=orig;
+  }
+}
+
+/* 링크 복사 버튼 */
+async function copyLink(){
+  const link=document.getElementById('shareLink').textContent;
+  if(!link) return;
+  try{ await navigator.clipboard.writeText(link);
+    const b=document.getElementById('btnCopy'); const o=b.textContent;
+    b.textContent='✓ 복사됨'; setTimeout(()=>b.textContent=o,1500);
+  }catch(e){ prompt('링크를 복사하세요:', link); }
+}
+
+/* Redis에서 날짜 데이터 로드 → renderWM */
+async function loadDate(date){
+  const stat=document.getElementById('shareStatus');
+  stat.className='share-status ing no-export'; stat.textContent=`${date} 데이터를 불러오는 중…`;
+  try{
+    const res=await fetch(`/api/load?date=${date}`);
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'로드 실패'); }
+    const { payload } = await res.json();
+    const { wm, comments } = payload;
+    // 날짜 설정
+    const iso=`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
+    setAsof(iso);
+    // 코멘트 localStorage에 적용
+    if(comments){ EDITABLE_IDS.forEach(id=>{ if(comments[id]) localStorage.setItem(LS_PREFIX+id, comments[id]); }); }
+    // 렌더
+    renderWM(wm);
+    // 코멘트 복원 (renderWM이 applyEditable 호출하므로 저장 후 재적용)
+    if(comments){ EDITABLE_IDS.forEach(id=>{ const el=document.getElementById(id); if(el&&comments[id]) el.innerHTML=comments[id]; }); }
+    // 공유 링크 표시
+    const shareUrl=`${location.origin}${location.pathname}?date=${date}`;
+    document.getElementById('shareLink').textContent=shareUrl;
+    document.getElementById('shareBar').classList.remove('hidden');
+    // 업로드 영역 숨기기 (읽기 전용 모드)
+    document.getElementById('dropWM').closest('.uploader').style.opacity='0.5';
+    stat.className='share-status ok no-export';
+    stat.textContent=`✓ ${date.slice(0,4)}.${date.slice(4,6)}.${date.slice(6,8)} 데이터를 불러왔습니다.`;
+  }catch(err){
+    stat.className='share-status err no-export'; stat.textContent='⚠ '+err.message;
+  }
+}
+
+/* 저장된 날짜 목록 가져와서 드롭다운 채우기 */
+async function loadDateList(){
+  try{
+    const res=await fetch('/api/load?list=1');
+    if(!res.ok) return;
+    const { dates } = await res.json();
+    const sel=document.getElementById('dateSelect');
+    if(dates&&dates.length){
+      dates.forEach(d=>{
+        const opt=document.createElement('option');
+        opt.value=d;
+        opt.textContent=`${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)}`;
+        sel.appendChild(opt);
+      });
+      document.getElementById('loadBar').classList.remove('hidden');
+    }
+  }catch(e){ /* silent */ }
+}
+
+document.getElementById('btnSave').addEventListener('click', saveAndShare);
+document.getElementById('btnCopy').addEventListener('click', copyLink);
+document.getElementById('shareLink').addEventListener('click', copyLink);
+document.getElementById('btnLoad').addEventListener('click', ()=>{
+  const v=document.getElementById('dateSelect').value;
+  if(v) loadDate(v);
+});
+
+/* ---------- init ---------- */
 /* ---------- init ---------- */
 (function init(){
-  const today=SAMPLE.asof || new Date().toISOString().slice(0,10);
   buildSeg();
-  setAsof(today);
   window.__DIM='asset';
-  renderWM(SAMPLE);
-  setDefaultCommentary();
+
+  const urlDate=getUrlDate();
+  if(urlDate){
+    // 링크로 접근한 경우 → 서버에서 데이터 로드
+    setAsof(`${urlDate.slice(0,4)}-${urlDate.slice(4,6)}-${urlDate.slice(6,8)}`);
+    renderWM(SAMPLE);          // 로딩 중 임시 화면
+    setDefaultCommentary();
+    loadDate(urlDate);         // 실제 데이터로 교체
+  } else {
+    // 일반 접근 → 샘플 + 파일 업로드 대기
+    const today=SAMPLE.asof || new Date().toISOString().slice(0,10);
+    setAsof(today);
+    renderWM(SAMPLE);
+    setDefaultCommentary();
+    loadDateList();            // 과거 날짜 드롭다운 채우기
+  }
+
   attachAutosave();
   document.getElementById('btnReset').addEventListener('click',()=>{
     if(confirm('편집한 모든 코멘트를 자동 생성 기본값으로 되돌립니다. 진행할까요?')){
