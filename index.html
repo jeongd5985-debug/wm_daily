@@ -181,10 +181,65 @@
     font-weight:700;cursor:pointer;font-family:inherit}
   .tgbtn:hover{background:#2d5a80} .tgbtn.alt{background:#fff;color:#3b719e;border:1.5px solid #3b719e}
   .tgbtn.alt:hover{background:#eef4f9}
+
+  /* 글로벌 ETF 섹션 (상단 다크 테마) */
+  section.etf-sect{background:#0e1d33;border-color:#0e1d33;color:#dde6f3;margin-bottom:18px}
+  .etf-sect .sh{color:#fff}
+  .etf-sect .sh .n{background:#3b8de8;color:#fff}
+  .etf-sect .sh small{color:#8eaed6;font-weight:600}
+  .etf-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:11px}
+  .etf-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .etf-seg{display:inline-flex;background:#15294a;border-radius:7px;padding:2px}
+  .etf-seg button{background:transparent;border:none;color:#8eaed6;padding:5px 11px;font-size:11.5px;
+    font-weight:700;border-radius:5px;cursor:pointer;font-family:inherit;transition:.12s}
+  .etf-seg button.active{background:#3b8de8;color:#fff}
+  .etf-updated{font-size:11px;color:#8eaed6;font-weight:600}
+  .etf-wrap{overflow-x:auto;background:#11233e;border-radius:8px;border:1px solid #1c3354}
+  .etf-tbl{width:100%;border-collapse:collapse;font-size:12.5px;color:#dde6f3;min-width:760px}
+  .etf-tbl th{color:#8eaed6;background:#0e1d33;border-bottom:1px solid #2d4870;padding:8px 10px;text-align:right;font-size:11px;font-weight:700}
+  .etf-tbl th:nth-child(1),.etf-tbl th:nth-child(2),.etf-tbl th:nth-child(3){text-align:left}
+  .etf-tbl td{border-bottom:1px solid #1c3354;padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums}
+  .etf-tbl td:nth-child(1),.etf-tbl td:nth-child(2),.etf-tbl td:nth-child(3){text-align:left}
+  .etf-tbl tr:last-child td{border-bottom:none}
+  .etf-tbl tr:hover td{background:#15294a}
+  .etf-tbl .sym{font-weight:800;color:#7eb6ff;font-family:'Menlo','Consolas',monospace}
+  .etf-tbl .cat{font-size:10.5px;color:#8eaed6;background:#1c3354;padding:1px 7px;border-radius:10px;font-weight:600;display:inline-block;white-space:nowrap}
+  .etf-tbl .nm{color:#cfdaee;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .etf-tbl .up{color:#3edd9a} .etf-tbl .down{color:#ff7e6b}
+  .etf-empty{padding:32px 12px;text-align:center;color:#5b7494;font-style:italic;font-size:12.5px}
+  .etf-mkt-status{font-size:11px;color:#8eaed6;margin-top:8px;min-height:14px}
+  .etf-mkt-status.err{color:#ff7e6b} .etf-mkt-status.ok{color:#3edd9a}
+
+  /* 자체완결 링크 버튼 */
+  .sbtn.purple{background:#7c4ddb} .sbtn.purple:hover{background:#653cb8}
+  .sbtn.purple.outline{background:#fff;color:#7c4ddb;border:1.5px solid #7c4ddb}
+  .sbtn.purple.outline:hover{background:#f3edff}
 </style>
 </head>
 <body>
 <div class="wrap">
+
+  <!-- 글로벌/한국 ETF 현황 -->
+  <section class="etf-sect">
+    <div class="etf-head">
+      <div class="sh"><span class="n">★</span> ETF 현황 <small>tradingview·ETF.com 기준 · Top 20 (AUM 큰 순)</small></div>
+      <div class="etf-actions no-export">
+        <div class="etf-seg" id="etfScope">
+          <button data-scope="global" class="active">글로벌</button>
+          <button data-scope="kr">한국</button>
+        </div>
+        <span class="etf-updated" id="etfUpdated"></span>
+        <button class="mktbtn" id="btnEtf" title="Claude+web_search로 최신 ETF 데이터를 가져옵니다 (10~20초 소요, 토큰 절약을 위해 필요할 때만 클릭)">🔄 ETF 가져오기</button>
+      </div>
+    </div>
+    <div class="etf-wrap">
+      <table class="etf-tbl">
+        <thead><tr><th>심볼</th><th>종목명</th><th>분류</th><th>현재가</th><th>변동률</th><th>거래량</th><th>AUM</th></tr></thead>
+        <tbody id="etfBody"><tr><td colspan="7" class="etf-empty">우측 [🔄 ETF 가져오기] 버튼을 누르면 Claude가 tradingview·ETF.com에서 Top 20을 조회해 표시합니다.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="etf-mkt-status no-export" id="etfStatus"></div>
+  </section>
 
   <div class="uploader no-export">
     <span class="u-title">📂 엑셀 자동 로드</span>
@@ -200,7 +255,8 @@
     <span class="sb-label">🔗 공유 링크</span>
     <span class="sb-link" id="shareLink" title="클릭해서 복사"></span>
     <button class="sbtn" id="btnCopy">📋 복사</button>
-    <button class="sbtn outline" id="btnSave">☁️ 저장 &amp; 링크 생성</button>
+    <button class="sbtn purple" id="btnSelfLink" title="서버 없이 URL 자체에 데이터를 압축해 담아 링크 생성 (Upstash 불필요, 어떤 호스팅에서도 동작)">🔗 자체완결 링크</button>
+    <button class="sbtn outline" id="btnSave" title="Upstash 서버에 저장 후 짧은 ?date= 링크 생성 (Vercel 환경변수 필요)">☁️ 서버 저장</button>
   </div>
   <div class="share-status no-export" id="shareStatus"></div>
 
@@ -309,9 +365,13 @@
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
 <script>
 /* 시장현황 API 엔드포인트 — Vercel 프록시 경유 (API 키 노출 방지) */
 const MKT_ENDPOINT = "/api/market";
+const ETF_ENDPOINT = "/api/etf";
+const ETF_LS_KEY   = "wm-etf-cache-v2";
+const ETF_SCOPE_KEY= "wm-etf-scope";
 
 /* 초기 내장 샘플 (업로드 전 미리보기용) — 실제 엑셀 업로드 시 전부 교체됨 */
 const SAMPLE = {
@@ -782,12 +842,29 @@ function readFile(input){
       setDefaultCommentary();
       document.getElementById('dropWM').classList.add('ok');
       document.getElementById('wmName').textContent='✓ '+file.name.slice(0,24);
-      // 공유 버튼 노출 + 링크 미리 세팅
-      const shareUrl=`${location.origin}${location.pathname}?date=${(window.__ASOF||'').replace(/-/g,'')}`;
-      document.getElementById('shareLink').textContent=shareUrl;
+      // 공유 버튼 노출 + 링크 미리 세팅 — 우선 자체완결 링크를 자동 생성 (서버 불필요)
       document.getElementById('shareBar').classList.remove('hidden');
-      document.getElementById('shareStatus').className='share-status ing no-export';
-      document.getElementById('shareStatus').textContent='☁️ 저장 & 링크 생성 버튼을 눌러 팀과 공유하세요.';
+      const stat=document.getElementById('shareStatus');
+      try{
+        if(typeof LZString!=='undefined'){
+          const r=buildSelfContainedUrl();
+          document.getElementById('shareLink').textContent=r.url;
+          const sizeKB=(r.url.length/1024).toFixed(1);
+          let warn='';
+          if(r.url.length>32000) warn=' ⚠ 32KB↑ 일부 환경에서 잘릴 수 있음';
+          else if(r.url.length>8000) warn=' (Slack/Telegram에선 잘릴 수 있음)';
+          stat.className='share-status ok no-export';
+          stat.textContent=`✓ 자체완결 링크 자동 생성 (${sizeKB}KB${warn}) · [📋 복사]로 공유. ☁️ 서버 저장이 필요하면 우측 버튼.`;
+        }else{
+          const shareUrl=`${location.origin}${location.pathname}?date=${(window.__ASOF||'').replace(/-/g,'')}`;
+          document.getElementById('shareLink').textContent=shareUrl;
+          stat.className='share-status ing no-export';
+          stat.textContent='LZ-String 미로드. ☁️ 서버 저장 버튼을 눌러 링크 생성.';
+        }
+      }catch(e){
+        stat.className='share-status err no-export';
+        stat.textContent='⚠ 링크 생성 오류: '+e.message;
+      }
     }catch(err){alert('파싱 오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
@@ -987,26 +1064,179 @@ document.getElementById('btnTgCopy').addEventListener('click',async function(){
   }
 });
 
-/* ---------- init ---------- */
+/* ========== ETF 현황 ========== */
+function renderETF(data){
+  const tb=document.getElementById('etfBody'); if(!tb) return;
+  if(!data||!data.etfs||!data.etfs.length){
+    tb.innerHTML='<tr><td colspan="7" class="etf-empty">데이터 없음</td></tr>'; return;
+  }
+  tb.innerHTML=data.etfs.slice(0,20).map(e=>{
+    const ch=parseFloat(e.change_pct);
+    const chCls=isNaN(ch)?'':(ch>0?'up':ch<0?'down':'');
+    const chTxt=isNaN(ch)?'-':(ch>0?'+':'')+ch.toFixed(2)+'%';
+    const cur=e.currency||'USD';
+    const priceTxt=e.price!=null?(cur==='KRW'?Number(e.price).toLocaleString():'$'+Number(e.price).toFixed(2)):'-';
+    return `<tr>
+      <td class="sym">${e.symbol||'-'}</td>
+      <td class="nm" title="${(e.name||'').replace(/"/g,'&quot;')}">${e.name||'-'}</td>
+      <td>${e.category?`<span class="cat">${e.category}</span>`:'-'}</td>
+      <td>${priceTxt}</td>
+      <td class="${chCls}">${chTxt}</td>
+      <td>${e.volume||'-'}</td>
+      <td>${e.aum||'-'}</td>
+    </tr>`;
+  }).join('');
+  if(data.updatedAt){
+    const d=new Date(data.updatedAt);
+    document.getElementById('etfUpdated').textContent='업데이트: '+d.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
+}
+async function fetchETF(){
+  const btn=document.getElementById('btnEtf');
+  const stat=document.getElementById('etfStatus');
+  const scope=window.__ETF_SCOPE||'global';
+  btn.disabled=true; const o=btn.textContent; btn.textContent='⏳ 조회 중…';
+  stat.className='etf-mkt-status no-export'; stat.textContent=`Claude+web_search로 ${scope==='kr'?'한국':'글로벌'} ETF Top 20 조회 중… (10~20초)`;
+  try{
+    const res=await fetch(ETF_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope})});
+    const text=await res.text();
+    let body={}; try{ body=JSON.parse(text); }catch(e){}
+    if(!res.ok) throw new Error(body.error||`HTTP ${res.status}` + (text?(' — '+text.slice(0,120)):''));
+    renderETF(body);
+    try{ localStorage.setItem(ETF_LS_KEY+':'+scope, JSON.stringify(body)); }catch(e){}
+    stat.className='etf-mkt-status ok no-export'; stat.textContent=`✓ ${scope==='kr'?'한국':'글로벌'} ETF 업데이트됨`;
+  }catch(err){
+    stat.className='etf-mkt-status err no-export'; stat.textContent='⚠ '+err.message+' (ANTHROPIC_API_KEY가 Vercel에 설정돼 있어야 합니다)';
+  }finally{
+    btn.disabled=false; btn.textContent=o;
+  }
+}
+function loadEtfCache(scope){
+  try{
+    const cached=localStorage.getItem(ETF_LS_KEY+':'+scope);
+    if(cached) renderETF(JSON.parse(cached));
+    else document.getElementById('etfBody').innerHTML=`<tr><td colspan="7" class="etf-empty">${scope==='kr'?'한국':'글로벌'} ETF 데이터를 불러오려면 [🔄 ETF 가져오기]를 클릭하세요.</td></tr>`;
+  }catch(e){}
+}
+function setEtfScope(scope){
+  window.__ETF_SCOPE=scope;
+  document.querySelectorAll('#etfScope button').forEach(b=>b.classList.toggle('active',b.getAttribute('data-scope')===scope));
+  try{ localStorage.setItem(ETF_SCOPE_KEY, scope); }catch(e){}
+  loadEtfCache(scope);
+}
+
+/* ========== 자체완결 링크 (서버 없이) ========== */
+/* 페이로드를 압축해 URL fragment(#d=)에 담아 어떤 호스팅에서든 동일 화면을 재현 */
+function buildSelfContainedUrl(){
+  if(typeof LZString==='undefined') return null;
+  const payload=buildPayload();
+  const json=JSON.stringify(payload);
+  const compressed=LZString.compressToEncodedURIComponent(json);
+  const date=(window.__ASOF||'').replace(/-/g,'');
+  return {
+    url: `${location.origin}${location.pathname}${date?'?date='+date:''}#d=${compressed}`,
+    encodedLen: compressed.length,
+    rawLen: json.length
+  };
+}
+async function generateSelfContainedLink(){
+  const stat=document.getElementById('shareStatus');
+  const btn=document.getElementById('btnSelfLink');
+  if(!window.__WM || window.__WM._sample){
+    stat.className='share-status err no-export';
+    stat.textContent='⚠ 엑셀 파일을 먼저 업로드한 뒤 생성하세요.';
+    return;
+  }
+  if(typeof LZString==='undefined'){
+    stat.className='share-status err no-export';
+    stat.textContent='⚠ LZ-String 라이브러리가 로드되지 않았습니다. 네트워크/CDN을 확인하세요.';
+    return;
+  }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='⏳ 생성 중…';
+  try{
+    const r=buildSelfContainedUrl();
+    document.getElementById('shareLink').textContent=r.url;
+    document.getElementById('shareBar').classList.remove('hidden');
+    const sizeKB=(r.url.length/1024).toFixed(1);
+    const rawKB=(r.rawLen/1024).toFixed(1);
+    let warn='';
+    if(r.url.length>32000) warn=' ⚠ URL이 매우 큼 (32KB↑) — 일부 브라우저/채팅앱에서 잘릴 수 있음. JSON 다운로드 권장.';
+    else if(r.url.length>8000) warn=' (8KB↑ — Slack/Telegram 등에서 잘릴 수 있음, 카카오톡·이메일은 일반적으로 OK)';
+    stat.className='share-status ok no-export';
+    stat.textContent=`✓ 자체완결 링크 생성 (총 ${sizeKB}KB, 원본 ${rawKB}KB → 압축). 서버 저장 불필요.${warn}`;
+    try{ await navigator.clipboard.writeText(r.url); stat.textContent+=' · 자동 복사됨'; }catch(e){}
+  }catch(err){
+    stat.className='share-status err no-export'; stat.textContent='⚠ 생성 실패: '+err.message;
+  }finally{
+    btn.disabled=false; btn.textContent=o;
+  }
+}
+function decodeFragmentData(){
+  const hash=location.hash;
+  if(!hash || !hash.startsWith('#d=')) return null;
+  if(typeof LZString==='undefined') return null;
+  try{
+    const json=LZString.decompressFromEncodedURIComponent(hash.slice(3));
+    if(!json) return null;
+    return JSON.parse(json);
+  }catch(e){
+    console.warn('Fragment decode 실패:', e);
+    return null;
+  }
+}
+function applyPayload(payload, source){
+  const { wm, comments } = payload;
+  if(comments){ EDITABLE_IDS.forEach(id=>{ if(comments[id]) localStorage.setItem(LS_PREFIX+id, comments[id]); }); }
+  renderWM(wm);
+  if(comments){ EDITABLE_IDS.forEach(id=>{ const el=document.getElementById(id); if(el&&comments[id]) el.innerHTML=comments[id]; }); }
+  document.getElementById('dropWM').closest('.uploader').style.opacity='0.5';
+  const wrapEl=document.querySelector('.uploader');
+  if(wrapEl){
+    const ro=document.createElement('div');
+    ro.style.cssText='font-size:11px;color:var(--accent);font-weight:700;padding:4px 10px;background:var(--accent-soft);border-radius:6px;margin-left:auto';
+    ro.textContent=source==='frag'?'🔗 자체완결 링크로 열림':'☁️ 서버 저장본으로 열림';
+    wrapEl.appendChild(ro);
+  }
+}
+
 /* ---------- init ---------- */
 (function init(){
   buildSeg();
   window.__DIM='asset';
 
+  // ETF 섹션 초기화
+  let savedScope='global';
+  try{ savedScope=localStorage.getItem(ETF_SCOPE_KEY)||'global'; }catch(e){}
+  setEtfScope(savedScope);
+  document.getElementById('btnEtf').addEventListener('click',fetchETF);
+  document.querySelectorAll('#etfScope button').forEach(b=>{
+    b.addEventListener('click',()=>setEtfScope(b.getAttribute('data-scope')));
+  });
+
+  // 1순위: URL fragment(#d=)에 압축 페이로드 → 자체완결 링크로 접근
+  const frag=decodeFragmentData();
   const urlDate=getUrlDate();
-  if(urlDate){
-    // 링크로 접근한 경우 → 서버에서 데이터 로드
-    setAsof(`${urlDate.slice(0,4)}-${urlDate.slice(4,6)}-${urlDate.slice(6,8)}`);
-    renderWM(SAMPLE);          // 로딩 중 임시 화면
+  if(frag){
+    const date=urlDate||'';
+    if(date) setAsof(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`);
+    else if(frag.wm&&frag.wm.asof) setAsof(frag.wm.asof);
+    else setAsof(new Date().toISOString().slice(0,10));
+    renderWM(SAMPLE);
     setDefaultCommentary();
-    loadDate(urlDate);         // 실제 데이터로 교체
+    applyPayload(frag,'frag');
+  } else if(urlDate){
+    // 2순위: ?date= 만 있으면 서버(Upstash)에서 로드
+    setAsof(`${urlDate.slice(0,4)}-${urlDate.slice(4,6)}-${urlDate.slice(6,8)}`);
+    renderWM(SAMPLE);
+    setDefaultCommentary();
+    loadDate(urlDate);
   } else {
     // 일반 접근 → 샘플 + 파일 업로드 대기
     const today=SAMPLE.asof || new Date().toISOString().slice(0,10);
     setAsof(today);
     renderWM(SAMPLE);
     setDefaultCommentary();
-    loadDateList();            // 과거 날짜 드롭다운 채우기
+    loadDateList();
   }
 
   attachAutosave();
@@ -1015,6 +1245,7 @@ document.getElementById('btnTgCopy').addEventListener('click',async function(){
       resetEditable(); renderWM(window.__WM||SAMPLE); setDefaultCommentary();
     }
   });
+  document.getElementById('btnSelfLink').addEventListener('click', generateSelfContainedLink);
 })();
 </script>
 </body>
