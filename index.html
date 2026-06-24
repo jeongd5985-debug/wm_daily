@@ -155,6 +155,32 @@
   .modal-note{font-size:11.5px;color:#8a4318;background:var(--accent-soft);border-radius:8px;
     padding:9px 12px;margin-top:12px;line-height:1.55}
   .modal-empty{color:#bcae93;font-style:italic;font-size:13px;padding:24px 0;text-align:center}
+
+  /* 센터별 현황 그리드 */
+  .ctr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+  .ctr-cell{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fbfaf7}
+  .ctr-cell .nm{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:3px}
+  .ctr-cell .vv{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+  .ctr-cell .ss{font-size:11px;color:var(--muted);margin-top:2px;font-weight:600}
+
+  /* 퇴직연금본부 요약 */
+  .dept-row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;padding:4px 0}
+  .dept-row .it .l{font-size:11px;color:var(--muted);font-weight:700}
+  .dept-row .it .v{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+
+  /* 텔레그램 발송용 */
+  section.tg{background:#eef4f9;border-color:#bcd2e3}
+  .tg-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .tg-head .sh{margin-bottom:0}
+  .tg-box{font-family:"Menlo","Consolas","Malgun Gothic",monospace;background:#fff;border:1px solid #bcd2e3;
+    border-radius:9px;padding:12px 14px;font-size:12.5px;line-height:1.65;color:#1c3954;white-space:pre-wrap;
+    outline:none;min-height:160px}
+  .tg-box:focus{box-shadow:0 0 0 3px rgba(59,113,158,.18)}
+  .tg-actions{display:flex;gap:7px;flex-wrap:wrap}
+  .tgbtn{background:#3b719e;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:11.5px;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  .tgbtn:hover{background:#2d5a80} .tgbtn.alt{background:#fff;color:#3b719e;border:1.5px solid #3b719e}
+  .tgbtn.alt:hover{background:#eef4f9}
 </style>
 </head>
 <body>
@@ -246,6 +272,28 @@
     <div class="insight"><span class="ic">▸</span><span id="ins5" contenteditable="true"></span></div>
   </section>
 
+  <section>
+    <div class="sh"><span class="n">6</span> 센터별 현황 <small>센터구분 기준 · NAV 큰 순</small></div>
+    <div class="ctr-grid" id="centerGrid"></div>
+  </section>
+
+  <section>
+    <div class="sh"><span class="n">7</span> 퇴직연금본부 <small>부서='퇴직연금사업본부' 필터</small></div>
+    <div class="dept-row" id="deptBox"></div>
+    <div class="insight"><span class="ic">▸</span><span id="ins7" contenteditable="true"></span></div>
+  </section>
+
+  <section class="tg">
+    <div class="tg-head">
+      <div class="sh"><span class="n">8</span> 텔레그램 발송용 <small>아래 텍스트를 그대로 복사 → 텔레그램에 붙여넣기 · 직접 수정 가능</small></div>
+      <div class="tg-actions no-export">
+        <button class="tgbtn alt" id="btnTgRegen" title="현재 데이터로 다시 생성">↻ 다시 생성</button>
+        <button class="tgbtn" id="btnTgCopy">📋 복사</button>
+      </div>
+    </div>
+    <div class="tg-box" id="tgBox" contenteditable="true"></div>
+  </section>
+
   <footer>WM마케팅본부 · 일간 수탁고 대시보드 · 엑셀('오늘' 탭)을 드롭하면 자동 갱신 · 회색 영역 클릭 시 수정 · 분류/판매사/전략펀드 클릭 시 펀드 드릴다운</footer>
 </div>
 
@@ -294,12 +342,15 @@ const f1r=x=>Math.round(x*10)/10;
 const cls=v=>v>0?'up':(v<0?'down':'');
 const sgn=v=>(v>0?'+':'')+v.toLocaleString();
 const won=n=>{const j=Math.floor(n/10000),e=n%10000;return (j>0?j+'조 ':'')+e.toLocaleString()+'억';};
+const wonTg=n=>{const a=Math.abs(Math.round(n)),s=n<0?'-':'';const j=Math.floor(a/10000),e=a%10000;return s+(j>0?j+'조':'')+e.toLocaleString()+'억';};
+const fmtSlash=iso=>{if(!iso)return '-';const[y,m,d]=iso.split('-');return `${y}/${m}/${d}`;};
+const sgnTg=v=>{const r=Math.round(v);return (r>=0?'+':'')+r.toLocaleString();};
 const shortFund=n=>String(n).replace(/증권 ?자?투자신탁/g,'').replace(/투자신탁/g,'').trim().slice(0,32);
 const escAttr=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
 /* ---------- localStorage persistence ---------- */
 const LS_PREFIX='wm-daily-v1-';
-const EDITABLE_IDS=['cmt1','ins2','ins4','ins5'];
+const EDITABLE_IDS=['cmt1','ins2','ins4','ins5','ins7','tgBox'];
 function applyEditable(id, defaultHTML){
   const el=document.getElementById(id); if(!el) return;
   const saved=localStorage.getItem(LS_PREFIX+id);
@@ -363,6 +414,10 @@ function parseWM(wb){
   };
   const clean=v=>{const s=String(v==null?'':v).trim(); return (s===''||s==='0')?'(미분류)':s;};
 
+  // YTD 컬럼 자동 탐색 (있을 때만)
+  const YTD_COL = ['YTD설정액증감','YTD설정증감','연초대비설정','연초대비설정액','연초대비설정액증감'].find(k=>C[k]!=null);
+  const YTD_NAV_COL = ['YTD NAV증감','YTDNAV증감','연초대비NAV','연초대비NAV증감'].find(k=>C[k]!=null);
+
   // 펀드 단위 원본행 저장 (드릴다운 + 분류별 집계용)
   wm._rows = data.map(r=>({
     fund: shortFund(r[C['펀드명']]),
@@ -371,12 +426,41 @@ function parseWM(wb){
     asset: clean(r[C['제로인대분류']]),
     pen: clean(r[C['연금']]),
     center: clean(r[C['센터구분']]),
+    dept: C['부서']!=null ? clean(r[C['부서']]) : '(미분류)',
     retire: C['퇴직연금구분']!=null ? clean(r[C['퇴직연금구분']]) : '(미분류)',
     flow: f1(num(r[C['설정액증감']])),
     nav_chg: f1(num(r[C['NAV증감']])),
-    nav: Math.round(num(r[C['NAV']])/S)
+    nav: Math.round(num(r[C['NAV']])/S),
+    ytd_flow: YTD_COL ? f1(num(r[YTD_COL])) : null,
+    ytd_nav_chg: YTD_NAV_COL ? f1(num(r[YTD_NAV_COL])) : null
   }));
   wm._sample=false;
+
+  // YTD 합계 (컬럼 있을 때만)
+  if(YTD_COL){
+    wm.ytd_flow_total=f1r(wm._rows.reduce((a,r)=>a+(r.ytd_flow||0),0));
+    wm.ytd_flow_retail=f1r(wm._rows.filter(r=>r.pen==='일반').reduce((a,r)=>a+(r.ytd_flow||0),0));
+    wm.ytd_flow_pension=f1r(wm._rows.filter(r=>r.pen==='연금').reduce((a,r)=>a+(r.ytd_flow||0),0));
+  }
+
+  // 센터별 집계
+  const ca=aggRows(wm._rows,'center');
+  wm.center_list=Object.keys(ca)
+    .filter(k=>k && k!=='-' && k!=='(미분류)')
+    .map(k=>({name:k,flow:f1r(ca[k].flow),nav_chg:f1r(ca[k].nav_chg),nav:Math.round(ca[k].nav),cnt:ca[k].cnt}))
+    .sort((a,b)=>b.nav-a.nav);
+
+  // 퇴직연금사업본부 (부서 기준)
+  const deptRows=wm._rows.filter(r=>r.dept==='퇴직연금사업본부');
+  if(deptRows.length){
+    wm.dept_pension={
+      nav: Math.round(deptRows.reduce((a,r)=>a+r.nav,0)),
+      flow: f1r(deptRows.reduce((a,r)=>a+r.flow,0)),
+      nav_chg: f1r(deptRows.reduce((a,r)=>a+r.nav_chg,0)),
+      ytd_flow: YTD_COL ? f1r(deptRows.reduce((a,r)=>a+(r.ytd_flow||0),0)) : null,
+      cnt: deptRows.length
+    };
+  }
 
   // 전략펀드 집계 (curated 순서)
   const sg=aggRows(wm._rows,'strat');
@@ -438,6 +522,117 @@ function renderWM(wm){
 
   renderDim(window.__DIM||'asset');
   applyEditable('ins5', `분류별로 행을 클릭하면 구성 펀드 상세가 열립니다. 당일 설정·평가 증감의 원인 펀드를 바로 확인하세요.`);
+
+  renderCenters(wm);
+  renderDept(wm);
+  renderTelegram(wm);
+}
+
+/* ===== 센터별 현황 ===== */
+function renderCenters(wm){
+  const grid=document.getElementById('centerGrid'); if(!grid) return;
+  const list=wm.center_list||[];
+  if(!list.length){ grid.innerHTML='<div class="empty">센터구분 데이터가 없습니다. 엑셀에 \'센터구분\' 컬럼이 있는지 확인하세요.</div>'; return; }
+  grid.innerHTML=list.map(c=>
+    `<div class="ctr-cell"><div class="nm">${c.name}</div>`+
+    `<div class="vv">${c.nav.toLocaleString()}<span style="font-size:11px;color:var(--muted);font-weight:600"> 억</span></div>`+
+    `<div class="ss"><span class="${cls(c.flow)}">설정 ${sgn(c.flow)}</span> · <span class="${cls(c.nav_chg)}">평가 ${sgn(c.nav_chg)}</span> · ${c.cnt}개</div></div>`
+  ).join('');
+}
+
+/* ===== 퇴직연금본부 ===== */
+function renderDept(wm){
+  const box=document.getElementById('deptBox'); if(!box) return;
+  const d=wm.dept_pension;
+  if(!d){
+    box.innerHTML='<div class="empty">부서=\'퇴직연금사업본부\' 데이터가 없습니다. 엑셀에 \'부서\' 컬럼이 있는지 확인하세요.</div>';
+    applyEditable('ins7', `엑셀에 '부서' 컬럼이 포함되어 있으면 퇴직연금사업본부 소관 펀드만 자동 집계됩니다.`);
+    return;
+  }
+  const ytdHtml = d.ytd_flow!=null ? `<div class="it"><div class="l">YTD 설정</div><div class="v ${cls(d.ytd_flow)}">${sgn(d.ytd_flow)}</div></div>` : '';
+  box.innerHTML=
+    `<div class="it"><div class="l">전체 NAV</div><div class="v">${d.nav.toLocaleString()} <span style="font-size:11px;color:var(--muted)">억</span></div></div>`+
+    `<div class="it"><div class="l">DTD 설정</div><div class="v ${cls(d.flow)}">${sgn(d.flow)}</div></div>`+
+    `<div class="it"><div class="l">DTD 평가</div><div class="v ${cls(d.nav_chg)}">${sgn(d.nav_chg)}</div></div>`+
+    ytdHtml+
+    `<div class="it"><div class="l">펀드수</div><div class="v">${d.cnt}</div></div>`;
+  applyEditable('ins7', `퇴직연금사업본부 NAV <b>${d.nav.toLocaleString()}억</b> · 당일 설정 <b>${sgn(d.flow)}억</b>, 평가 <b>${sgn(d.nav_chg)}억</b>.`);
+}
+
+/* ===== 텔레그램 발송용 텍스트 생성 ===== */
+function stripHtml(s){const d=document.createElement('div'); d.innerHTML=s||''; return d.textContent||''; }
+function getMarketOneLiner(){
+  const html=(document.getElementById('cmt1')||{}).innerHTML||'';
+  // [시장현황 · ...] 머리말 제거, 첫 문장 추출
+  let t=stripHtml(html).replace(/\[시장현황[^\]]*\]\s*/g,'').trim();
+  // 첫 문장 (마침표/물음표/느낌표/줄바꿈)
+  const m=t.split(/[.。!?\n]/).filter(s=>s.trim().length>5)[0];
+  if(!m) return '';
+  // 어미 제거 (~다 / ~함 / ~음 / ~함. → 단순화는 사용자가 직접 조정)
+  return m.trim().replace(/\s+/g,' ').slice(0,90);
+}
+function topInOutByPen(wm, pen, n=2){
+  const rows=(wm._rows||[]).filter(r=>r.pen===pen && r.fund!=='(미분류)');
+  const ins=rows.filter(r=>r.flow>0).sort((a,b)=>b.flow-a.flow).slice(0,n);
+  const outs=rows.filter(r=>r.flow<0).sort((a,b)=>a.flow-b.flow).slice(0,n);
+  return [...ins, ...outs];
+}
+function buildTelegram(wm){
+  if(!wm || wm._sample===true && !wm._rows) return '';
+  const asof=window.__ASOF||'';
+  const slash=fmtSlash(asof);
+  const tot=wm.total||0, ret=wm.retail||0, pen=wm.pension||0;
+  const dtdT=wm.flow_total||0, dtdR=wm.flow_retail||0, dtdP=wm.flow_pension||0;
+  const ytdT=wm.ytd_flow_total!=null?wm.ytd_flow_total:null;
+  const ytdStr = ytdT!=null ? `, YTD${ytdT>=0?'+':''}${wonTg(ytdT)}` : '';
+
+  const mkt = getMarketOneLiner();
+
+  // 주요 설정해지 - (판매사) (펀드명) ±N억 형태
+  const fmtItem=r=>`${r.sales} ${r.fund} ${sgnTg(r.flow)}억`;
+  const retailHL = topInOutByPen(wm,'일반',1).map(fmtItem).join(' , ');
+  const pensionHL = topInOutByPen(wm,'연금',1).map(fmtItem).join(' , ');
+
+  // 전략펀드
+  const stratLines=(wm.strat||[]).filter(s=>['K제조핵심','K방산조선원전','TDF'].includes(s.name)).map(s=>
+    `${s.name} (NAV ${s.nav.toLocaleString()}억), 설정해지 ${sgnTg(s.flow)}억  NAV ${sgnTg(s.nav_chg)}억`
+  ).join('\n');
+
+  // 퇴직연금본부
+  const d=wm.dept_pension;
+  const deptYTD = (d && d.ytd_flow!=null) ? ` YTD${d.ytd_flow>=0?'+':''}${wonTg(d.ytd_flow)}` : '';
+  const deptLine = d
+    ? `전체  ${wonTg(d.nav)} DTD${d.flow>=0?'+':''}${wonTg(d.flow)}${deptYTD}`
+    : `전체  - (부서='퇴직연금사업본부' 데이터 없음)`;
+
+  return [
+    `▣ WM마케팅본부 수탁고   (${slash} 기준)`,
+    ``,
+    `[전체]   ${wonTg(tot)} (DTD${dtdT>=0?'+':''}${wonTg(dtdT)}${ytdStr})`,
+    `리테일 ${wonTg(ret)}(DTD${dtdR>=0?'+':''}${wonTg(dtdR)})`,
+    `연금 ${wonTg(pen)}(DTD${dtdP>=0?'+':''}${wonTg(dtdP)})`,
+    mkt?`*${mkt}`:`*시장 코멘트는 §1에서 가져오기 버튼을 누르면 자동 반영됩니다`,
+    ``,
+    `[주요설정해지]`,
+    `*리테일 : ${retailHL||'-'}`,
+    `*연금 : ${pensionHL||'-'}`,
+    ``,
+    `[전략펀드]`,
+    stratLines||'-',
+    ``,
+    `[퇴직연금본부]`,
+    deptLine
+  ].join('\n');
+}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderTelegram(wm){
+  const el=document.getElementById('tgBox'); if(!el) return;
+  const saved=localStorage.getItem(LS_PREFIX+'tgBox');
+  if(saved!==null && saved.trim().length>0){
+    el.innerHTML=saved;
+  }else{
+    el.innerHTML=escHtml(buildTelegram(wm));
+  }
 }
 
 /* ---------- 분류별 드릴다운 섹션 ---------- */
@@ -532,11 +727,18 @@ async function fetchMarket(){
   const ctx=`한화자산운용 WM마케팅본부 일간 수탁고 기준일=${fmtDot(asof)}. `+
     `당사 주력: 국내주식(제조·배당 K제조핵심, 방산 K방산조선원전), TDF(LIFEPLUS), 단기국공채/채권, 헤라클레스(해외). `+
     `당일 합계 설정 ${wm.flow_total??'-'}억·평가 ${wm.nav_chg_total??'-'}억.`;
-  const prompt=`${ctx}\n\n위 기준일(${fmtDot(asof)})의 한국 자산운용 시장현황을 간결한 한국어로 정리해줘. 다음을 5문장 이내로:\n`+
-    `1) 코스피/코스닥 종가·등락률 등 핵심 지수\n`+
-    `2) 국내외 채권금리·환율 등 매크로 한 줄\n`+
-    `3) 위 한화 WM 주력 테마(제조·배당/방산/TDF/채권)에 주는 시사점 1~2문장.\n`+
-    `불릿/마크다운 없이 평문으로. 수치는 web_search로 확인. 모르면 추정 말고 "확인 불가"로.`;
+  // 해외 자산군 노출 요약 (Claude에 컨텍스트 제공)
+  const fagg=(asset)=>{const rs=(wm._rows||[]).filter(r=>r.asset===asset);
+    return {nav:Math.round(rs.reduce((a,r)=>a+r.nav,0)), flow:f1r(rs.reduce((a,r)=>a+r.flow,0)), nav_chg:f1r(rs.reduce((a,r)=>a+r.nav_chg,0)), cnt:rs.length};};
+  const feq=fagg('해외주식형'), fbd=fagg('해외채권'), fetc=fagg('해외기타');
+  const foreignCtx = `당사 해외자산 노출: 해외주식형 NAV ${feq.nav.toLocaleString()}억(설정${sgn(feq.flow)}/평가${sgn(feq.nav_chg)}), 해외채권 NAV ${fbd.nav.toLocaleString()}억(설정${sgn(fbd.flow)}/평가${sgn(fbd.nav_chg)}), 해외기타 NAV ${fetc.nav.toLocaleString()}억(설정${sgn(fetc.flow)}/평가${sgn(fetc.nav_chg)}).`;
+
+  const prompt=`${ctx} ${foreignCtx}\n\n위 기준일(${fmtDot(asof)})의 국내+글로벌 자산운용 시장현황을 간결한 한국어로 정리해줘. 다음 순서로 6~8문장 이내, 평문(불릿/마크다운 없이):\n`+
+    `1) [국내] 코스피/코스닥 종가·등락률, 원달러 환율, 국고채 3년/10년 금리 핵심 한 줄\n`+
+    `2) [글로벌] S&P500/나스닥/닛케이/상해종합 등 주요 해외 지수 등락률 한 줄, 미 10년물 금리·달러인덱스 한 줄\n`+
+    `3) [영향] 위 시장 움직임이 당사 보유 해외주식형(${feq.nav.toLocaleString()}억)·해외채권(${fbd.nav.toLocaleString()}억)·해외기타TDF(${fetc.nav.toLocaleString()}억)에 미친 평가/유출입 영향 1~2문장 (실제 평가증감 수치와 부합되게)\n`+
+    `4) [국내 주력] 한화 WM 주력 테마(제조·배당/방산/TDF/채권) 시사점 1문장.\n`+
+    `수치는 web_search로 검증, 모르면 "확인 불가". 첫 문장은 반드시 KOSPI 등락률로 시작.`;
 
   btn.disabled=true; const orig=btn.textContent; btn.textContent='⏳ 조회 중…';
   stat.className='mkt-status no-export'; stat.textContent='Claude가 기준일 기준 시장현황을 조회하고 있습니다…';
@@ -641,6 +843,11 @@ async function saveAndShare(){
   const stat=document.getElementById('shareStatus');
   const asof=window.__ASOF;
   if(!asof){stat.className='share-status err no-export';stat.textContent='기준일을 먼저 설정하세요.';return;}
+  if(!window.__WM || window.__WM._sample){
+    stat.className='share-status err no-export';
+    stat.textContent='⚠ 엑셀 파일을 먼저 업로드한 뒤 저장하세요. (샘플 데이터는 저장 안 됨)';
+    return;
+  }
   const date=asof.replace(/-/g,'');   // "20260622"
 
   btn.disabled=true; const orig=btn.textContent; btn.textContent='⏳ 저장 중…';
@@ -651,7 +858,12 @@ async function saveAndShare(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ date, payload: buildPayload() })
     });
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error||'저장 실패'); }
+    const text=await res.text();
+    let body={}; try{ body=JSON.parse(text); }catch(e){}
+    if(!res.ok){
+      const msg = body.error || `HTTP ${res.status}` + (text?(' — '+text.slice(0,140)):'');
+      throw new Error(msg);
+    }
     const shareUrl=`${location.origin}${location.pathname}?date=${date}`;
     document.getElementById('shareLink').textContent=shareUrl;
     document.getElementById('shareBar').classList.remove('hidden');
@@ -659,11 +871,25 @@ async function saveAndShare(){
     stat.textContent='✓ 저장 완료! 위 링크를 팀에 공유하세요.';
     // 클립보드 자동 복사
     try{ await navigator.clipboard.writeText(shareUrl); stat.textContent+=' (링크 복사됨)'; }catch(e){}
+    // 드롭다운에 오늘 날짜 즉시 추가
+    addDateToDropdown(date);
   }catch(err){
-    stat.className='share-status err no-export'; stat.textContent='⚠ '+err.message;
+    stat.className='share-status err no-export';
+    stat.textContent='⚠ '+err.message+' — Vercel 환경변수(UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN)가 설정되었는지 확인하세요.';
   }finally{
     btn.disabled=false; btn.textContent=orig;
   }
+}
+
+function addDateToDropdown(date){
+  const sel=document.getElementById('dateSelect'); if(!sel) return;
+  // 이미 있으면 skip
+  if([...sel.options].some(o=>o.value===date)) return;
+  const opt=document.createElement('option');
+  opt.value=date; opt.textContent=`${date.slice(0,4)}.${date.slice(4,6)}.${date.slice(6,8)}`;
+  // 첫 placeholder 다음에 삽입
+  sel.insertBefore(opt, sel.options[1]||null);
+  document.getElementById('loadBar').classList.remove('hidden');
 }
 
 /* 링크 복사 버튼 */
@@ -736,6 +962,29 @@ document.getElementById('shareLink').addEventListener('click', copyLink);
 document.getElementById('btnLoad').addEventListener('click', ()=>{
   const v=document.getElementById('dateSelect').value;
   if(v) loadDate(v);
+});
+
+/* ===== 텔레그램 박스: 재생성 / 복사 ===== */
+document.getElementById('btnTgRegen').addEventListener('click',()=>{
+  if(!confirm('현재 편집한 텔레그램 텍스트를 지우고 최신 데이터로 다시 생성합니다. 계속할까요?')) return;
+  localStorage.removeItem(LS_PREFIX+'tgBox');
+  const el=document.getElementById('tgBox');
+  el.innerHTML=escHtml(buildTelegram(window.__WM||SAMPLE));
+  flashSaved();
+});
+document.getElementById('btnTgCopy').addEventListener('click',async function(){
+  const el=document.getElementById('tgBox');
+  const txt=el.innerText||el.textContent||'';
+  try{
+    await navigator.clipboard.writeText(txt);
+    const o=this.textContent; this.textContent='✓ 복사됨';
+    setTimeout(()=>this.textContent=o,1500);
+  }catch(e){
+    // 폴백: 선택 후 사용자 직접 복사 안내
+    const range=document.createRange(); range.selectNodeContents(el);
+    const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    alert('자동 복사 실패. 텍스트가 선택되었습니다 — Ctrl/Cmd+C로 복사하세요.');
+  }
 });
 
 /* ---------- init ---------- */
