@@ -1,0 +1,14 @@
+{
+  "name": "wm-daily",
+  "version": "1.0.0",
+  "description": "WM Daily AUM Dashboard",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.31.0"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}
